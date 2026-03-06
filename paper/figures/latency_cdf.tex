@@ -1,0 +1,31 @@
+\begin{tikzpicture}
+\begin{axis}[
+    width=12cm,
+    height=7cm,
+    xlabel={Middleware latency (ms)},
+    ylabel={CDF of requests (\%)},
+    xmin=0, xmax=1.0,
+    ymin=0, ymax=105,
+    ytick={0,25,50,75,100},
+    grid=both,
+    grid style={dashed,gray!40},
+    legend style={at={(0.5,-0.15)}, anchor=north, legend columns=-1},
+    clip=false
+]
+% PCFI latency CDF: sub-millisecond spike
+\addplot[
+    blue!70,
+    thick,
+    mark=*,
+    mark size=1.5pt
+] coordinates {
+    (0.00, 0)
+    (0.02, 40)
+    (0.04, 70)
+    (0.08, 95)
+    (0.14, 100)
+};
+\addlegendentry{PCFI middleware}
+\end{axis}
+\end{tikzpicture}
+

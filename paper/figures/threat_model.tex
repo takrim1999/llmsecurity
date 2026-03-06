@@ -1,0 +1,30 @@
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    box/.style={rectangle, draw=black, thick, minimum width=4cm, minimum height=1cm, align=center, fill=blue!10},
+    arrow/.style={-{Latex[length=3mm]}, thick},
+    attack/.style={-{Latex[length=3mm]}, dashed, thick, red}
+]
+    % Nodes
+    \node[box, fill=blue!20] (sys) {\textbf{System (S)} \\ Highest Priority};
+    \node[box] (dev) [below=of sys] {\textbf{Developer (D)}};
+    \node[box, fill=gray!10] (usr) [below=of dev] {\textbf{User (U)} \\ Untrusted};
+    \node[box, fill=gray!10] (rag) [below=of usr] {\textbf{RAG (R)} \\ Untrusted};
+
+    % Arrows
+    \draw[arrow] (sys) -- (dev) node[midway, right] {Priority};
+    \draw[arrow] (dev) -- (usr);
+    \draw[arrow] (usr) -- (rag);
+
+    % Attack arrows
+    \draw[attack]
+      (usr.east)
+        .. controls +(1,0.5) and +(1,-0.5) ..
+      (sys.east)
+        node[midway, right, align=center, text=black] {Prompt Injection \\ Attack (Override)};
+
+    \draw[attack]
+      (rag.east)
+        .. controls +(1,0.5) and +(1,-1.0) ..
+      (sys.east);
+\end{tikzpicture}
+

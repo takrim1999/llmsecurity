@@ -2,6 +2,12 @@
 
 \usepackage{amsmath}
 \usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 \usepackage{url}
 
 \begin{document}
@@ -66,6 +72,21 @@ The adversary's goal is to cause the model to violate system-level policies (e.g
 
 We do not assume the adversary can modify the PCFI middleware, the LLM parameters, or the system prompt $S$ itself. We consider both direct prompt injection (explicit instructions such as ``ignore previous instructions'') and indirect injection via retrieved context.
 
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{\input{figures/threat_model}}
+\caption{Threat model showing strict priority ordering among prompt sources. Attacks originate in untrusted user or RAG segments and attempt to override higher-priority system policy.}
+\label{fig:threat_model}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Problem space of representative prompt-injection patterns and expected failure modes without defenses.}
+\label{tab:problem_space}
+\small
+\resizebox{\linewidth}{!}{\input{tables/problem_space}}
+\end{table}
+
 \section{PCFI Design}
 
 PCFI brings the notion of control-flow integrity to the prompt construction process. Instead of treating prompts as undifferentiated strings, PCFI represents them as a graph whose nodes are segments with associated roles, priorities, and provenance. Edges capture how information flows from higher-priority segments into lower-priority ones.
@@ -89,6 +110,13 @@ At runtime, PCFI applies a three-stage pipeline to the prompt graph before the r
   \item \textbf{Role-Switch Detection:} Structural checks identify attempts by low-priority segments to impersonate higher-privilege roles, for example by introducing prefixes like ``system:'' or JSON fields that redefine roles. This stage may trigger sanitization, such as stripping role-like prefixes, when evidence of role-switch is present.
   \item \textbf{Hierarchical Graph Enforcement:} Given the policy that $S > D > U > R$, this stage checks for conflicts where directives originating from lower-priority segments contradict constraints in higher-priority segments. When a conflict is detected (e.g., $U$ or $R$ contains a directive matching a forbidden pattern such as ``ignore previous instructions''), PCFI treats it as a control-flow violation and blocks the request.
 \end{enumerate}
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{\input{figures/design_pipeline}}
+\caption{PCFI API gateway pipeline. Requests are parsed into a prompt graph and checked by lexical heuristics, role-switch detection, and hierarchical enforcement before reaching the domain LLM.}
+\label{fig:design_pipeline}
+\end{figure}
 
 \subsection{Decision Outcomes}
 
@@ -152,6 +180,13 @@ To evaluate PCFI, we construct a suite of synthetic and semi-realistic datasets:
 \end{itemize}
 Each example is labeled as benign or attack, and includes an oracle describing whether a model's response violates the intended policy.
 
+\begin{table}[t]
+\centering
+\caption{Dataset suite used in evaluation.}
+\label{tab:dataset_stats}
+\resizebox{\linewidth}{!}{\input{tables/dataset_stats}}
+\end{table}
+
 \subsection{Baselines and Ablations}
 
 We compare:
@@ -178,14 +213,7 @@ We run experiments on a fixed LLM backend configuration and report average resul
 \centering
 \caption{Baseline vs.\ PCFI security and performance (evaluation on 50 benign and 100 attack samples).}
 \label{tab:performance}
-\begin{tabular}{lccc}
-\hline
-\textbf{Configuration} & \textbf{ASR (\%)} & \textbf{FPR (\%)} & \textbf{Latency (ms)} \\
-\hline
-Baseline (No Defense) & 100 & 0 & -- \\
-Full PCFI             & 0 & 0 & 0.04 (median) \\
-\hline
-\end{tabular}
+\resizebox{\linewidth}{!}{\input{tables/performance_metrics}}
 \end{table}
 
 Table~\ref{tab:performance} summarizes security and performance metrics for Baseline and Full PCFI.
@@ -200,6 +228,13 @@ We first evaluate PCFI's impact on attack success rate across different attack f
   \item Baseline (No Defense): 100\% of attack samples would reach the LLM; Full PCFI: \textbf{0\%} ASR (all 100 attack samples blocked in our evaluation).
   \item Across attack families: direct injection and indirect RAG injection are both blocked by the hierarchical enforcement stage when forbidden patterns (e.g., ``ignore all previous instructions'') appear in user or RAG segments.
 \end{itemize}
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{\input{figures/asr_comparison}}
+\caption{Attack success rate (ASR) for direct and indirect (RAG) prompt injection. Full PCFI reduces ASR to 0\% on both attack families in our evaluation.}
+\label{fig:asr_comparison}
+\end{figure}
 
 \textbf{False Positive Rate (FPR).} We measure how often benign queries are mistakenly blocked or over-sanitized:
 
@@ -217,6 +252,13 @@ We quantify the cost of running PCFI at the API layer.
   \item Median (p50) overhead: \textbf{0.04\,ms}.
   \item Tail (p95/p99) overhead: \textbf{0.08\,ms} / \textbf{0.14\,ms}.
 \end{itemize}
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{\input{figures/latency_cdf}}
+\caption{Cumulative distribution of PCFI middleware latency. Nearly all requests complete within sub-millisecond latency, with the CDF reaching 100\% well below 1\,ms.}
+\label{fig:latency_cdf}
+\end{figure}
 
 \textbf{Throughput.} The per-request overhead is sub-millisecond; throughput under load is dominated by the LLM backend rather than the PCFI middleware.
 

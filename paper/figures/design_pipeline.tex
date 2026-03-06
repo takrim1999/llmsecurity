@@ -1,0 +1,40 @@
+\begin{tikzpicture}[
+    node distance=1.8cm,
+    box/.style={rectangle, draw=black, thick, minimum width=2.5cm, minimum height=1cm, align=center, fill=blue!5},
+    diamond_node/.style={diamond, draw=black, thick, aspect=2, align=center, fill=orange!10},
+    arrow/.style={-{Latex[length=3mm]}, thick}
+]
+    % Nodes
+    \node[box] (input) {User Input};
+    \node[box] (gateway) [right=of input] {FastAPI \\ Gateway};
+    \node[box] (constructor) [right=of gateway] {Prompt Graph \\ Constructor};
+
+    \node[box] (lexical) [right=of constructor] {1. Lexical \\ Heuristics};
+    \node[box] (role) [right=of lexical] {2. Role-Switch \\ Detection};
+    \node[box] (hierarchical) [right=of role] {3. Hierarchical \\ Enforcement};
+
+    \node[diamond_node] (violation) [right=of hierarchical] {Violation?};
+
+    \node[box, fill=red!10] (block) [below=of violation] {Safe Refusal \\ (Block 403)};
+    \node[box, fill=green!10] (llm) [right=of violation] {Domain LLM};
+    \node[box] (output) [right=of llm] {System Output};
+
+    % Grouping box
+    \begin{scope}[on background layer]
+        \node[draw=blue, thick, dashed, fill=blue!5, inner sep=15pt, fit=(lexical) (role) (hierarchical)] (engine) {};
+        \node[above left] at (engine.north east) {\textbf{PCFI Engine}};
+    \end{scope}
+
+    % Arrows
+    \draw[arrow] (input) -- (gateway);
+    \draw[arrow] (gateway) -- (constructor);
+    \draw[arrow] (constructor) -- (lexical);
+    \draw[arrow] (lexical) -- (role);
+    \draw[arrow] (role) -- (hierarchical);
+    \draw[arrow] (hierarchical) -- (violation);
+    
+    \draw[arrow] (violation) -- node[right] {Yes} (block);
+    \draw[arrow] (violation) -- node[above] {No} (llm);
+    \draw[arrow] (llm) -- (output);
+\end{tikzpicture}
+

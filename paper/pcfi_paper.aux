@@ -8,37 +8,49 @@
 \@writefile{toc}{\contentsline {section}{\numberline {II}Background and Threat Model}{1}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Prompt Injection in Deployed LLM Systems}{1}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Prompt Graph Model}{1}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Threat model showing strict priority ordering among prompt sources. Attacks originate in untrusted user or RAG segments and attempt to override higher-priority system policy.}}{2}{}\protected@file@percent }
+\newlabel{fig:threat_model}{{1}{2}{}{figure.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Threat Model}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {III}PCFI Design}{2}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Problem space of representative prompt-injection patterns and expected failure modes without defenses.}}{2}{}\protected@file@percent }
+\newlabel{tab:problem_space}{{I}{2}{}{table.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Prompt Segments and Priorities}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Three-Stage Middleware Pipeline}{2}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Toy prompt structure. PCFI should treat the user segment as a violation and block the request.}}{2}{}\protected@file@percent }
-\newlabel{fig:toy_prompt}{{1}{2}{}{figure.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Decision Outcomes}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {IV}Implementation}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}API Gateway Middleware}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Toy Prompt Structure}{2}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces PCFI API gateway pipeline. Requests are parsed into a prompt graph and checked by lexical heuristics, role-switch detection, and hierarchical enforcement before reaching the domain LLM.}}{3}{}\protected@file@percent }
+\newlabel{fig:design_pipeline}{{2}{3}{}{figure.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Toy prompt structure. PCFI should treat the user segment as a violation and block the request.}}{3}{}\protected@file@percent }
+\newlabel{fig:toy_prompt}{{3}{3}{}{figure.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Decision Outcomes}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Implementation}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}API Gateway Middleware}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Toy Prompt Structure}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Prompt Graph Representation}{3}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Dataset suite used in evaluation.}}{3}{}\protected@file@percent }
+\newlabel{tab:dataset_stats}{{II}{3}{}{table.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Policy Language}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {V}Evaluation Setup}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Datasets}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Baselines and Ablations}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Metrics}{3}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Baseline vs.\ PCFI security and performance (evaluation on 50 benign and 100 attack samples).}}{3}{}\protected@file@percent }
-\newlabel{tab:performance}{{I}{3}{}{table.1}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {VI}Results}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Security Effectiveness}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Performance Overhead}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {VII}Discussion and Limitations}{3}{}\protected@file@percent }
 \citation{sok_prompt_hacking}
 \citation{rag_n_roll}
 \citation{abadi_cfi}
 \citation{nemo_guardrails}
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Baseline vs.\ PCFI security and performance (evaluation on 50 benign and 100 attack samples).}}{4}{}\protected@file@percent }
+\newlabel{tab:performance}{{III}{4}{}{table.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Attack success rate (ASR) for direct and indirect (RAG) prompt injection. Full PCFI reduces ASR to 0\% on both attack families in our evaluation.}}{4}{}\protected@file@percent }
+\newlabel{fig:asr_comparison}{{4}{4}{}{figure.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Results}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Security Effectiveness}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Performance Overhead}{4}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Cumulative distribution of PCFI middleware latency. Nearly all requests complete within sub-millisecond latency, with the CDF reaching 100\% well below 1\,ms.}}{4}{}\protected@file@percent }
+\newlabel{fig:latency_cdf}{{5}{4}{}{figure.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Discussion and Limitations}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VIII}Related Work}{4}{}\protected@file@percent }
 \bibcite{sok_prompt_hacking}{1}
 \bibcite{rag_n_roll}{2}
 \bibcite{abadi_cfi}{3}
 \bibcite{nemo_guardrails}{4}
-\@writefile{toc}{\contentsline {section}{\numberline {VIII}Related Work}{4}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {IX}Conclusion}{4}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{References}{4}{}\protected@file@percent }
-\gdef \@abspage@last{4}
+\@writefile{toc}{\contentsline {section}{\numberline {IX}Conclusion}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{5}{}\protected@file@percent }
+\gdef \@abspage@last{5}
