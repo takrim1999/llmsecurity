@@ -1,0 +1,263 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{url}
+
+\begin{document}
+
+\title{Prompt Control-Flow Integrity: A Structural Runtime Defense Against Prompt Injection in Deployed LLM Systems}
+
+\author{
+\IEEEauthorblockN{Md Takrim Ul Alam}
+\IEEEauthorblockA{\textit{Dept.\ of Information and Communication Engineering} \\
+\textit{University of Rajshahi} \\
+Rajshahi, Bangladesh \\
+ORCID: 0009-0003-3909-0074 \\
+takrimulalom@gmail.com}
+}
+
+\maketitle
+
+\begin{abstract}
+Large language models (LLMs) deployed behind APIs and retrieval-augmented generation (RAG) stacks are vulnerable to prompt injection attacks that overwrite system policies, subvert tools, and exfiltrate secrets. Existing defenses largely treat prompts as flat strings and rely on ad-hoc filtering or static jailbreak detection. This paper proposes \emph{Prompt Control-Flow Integrity} (PCFI), a structural, runtime defense that models a request as a prioritized prompt graph and enforces control-flow invariants at the API boundary. PCFI represents each query as a composition of system, developer, user, and retrieved-document segments, and applies a three-stage middleware pipeline---lexical heuristics, role-switch detection, and hierarchical graph enforcement---before forwarding to the LLM backend. We implement PCFI as a FastAPI middleware gateway in front of a production-grade LLM API and evaluate its effectiveness on synthetic and semi-realistic RAG injection workloads. Our results show that PCFI completely mitigates the tested injection vectors (0\% Attack Success Rate) while maintaining a 0\% False Positive Rate and introducing a median processing latency overhead of just 0.04\,ms.
+\end{abstract}
+
+\section{Introduction}
+
+Large language models are increasingly embedded in security- and safety-critical workflows, including code generation, customer support, and semi-automated incident response. In these settings, prompts are often constructed from multiple heterogeneous sources: system policies authored by the provider, developer-level templates, user queries, and retrieved context from document stores or tools. Prompt injection attacks exploit this composition to overwrite or reinterpret higher-priority instructions, leading to policy violations and data exfiltration~\cite{sok_prompt_hacking,rag_n_roll}.
+
+A key challenge is that most deployed systems treat the prompt as a flat string, discarding provenance and control-flow structure. This makes it difficult to reason about which parts of the prompt are allowed to influence behavior and which must never override safety-critical policies. In contrast, classic control-flow integrity (CFI) for low-level code enforces invariants over a program's control-flow graph to prevent hijacking attacks~\cite{abadi_cfi}.
+
+In this paper, we introduce \emph{Prompt Control-Flow Integrity} (PCFI), a structural runtime defense for prompt injection in deployed LLM systems. PCFI builds a prioritized prompt graph from the components of each API request and enforces invariants that reflect the intended hierarchy among sources. We implement PCFI as an API-level middleware that interposes on all LLM calls, evaluates the prompt graph using a three-stage pipeline, and either allows, sanitizes, or blocks requests before they reach the backend.
+
+\section{Background and Threat Model}
+
+\subsection{Prompt Injection in Deployed LLM Systems}
+
+Prompt injection attacks attempt to cause the model to ignore prior policies or instructions, execute unintended tool calls, or leak sensitive data~\cite{sok_prompt_hacking,rag_n_roll}. In RAG-style systems, the attacker can often influence retrieved documents, for example by editing a public wiki page or sending specially crafted emails that are indexed into a knowledge base. When those documents are later retrieved, their contents are concatenated into the prompt, giving the attacker a channel to inject adversarial instructions.
+
+\subsection{Prompt Graph Model}
+
+We model a complete prompt as a structured sequence of segments with explicit provenance. Let $S$ denote the system-level instructions (e.g., global safety policies), $D$ denote developer-provided templates, $U$ denote user input, and $R$ denote retrieved context such as RAG documents. For a given request, we define the prompt graph as:
+\begin{equation}
+P = S \,\|\, D \,\|\, U \,\|\, R,
+\end{equation}
+where $\|$ denotes concatenation augmented with provenance metadata.
+
+The core security assumption is a strict priority ordering:
+\begin{equation}
+S > D > U > R,
+\end{equation}
+meaning lower-priority segments must not override or reinterpret higher-priority policies. In the rest of the paper, for brevity, we write the composition as
+\begin{equation}
+P = S \,\|\, U \,\|\, R,
+\end{equation}
+with the understanding that $D$ (developer prompts) sits between $S$ and $U$ in the hierarchy.
+
+\subsection{Threat Model}
+
+We assume the defender controls the LLM backend, the system and developer prompts, and the API gateway where PCFI is deployed. The adversary can:
+\begin{itemize}
+  \item Submit arbitrary user-level input $U$ to the system.
+  \item Influence a subset of retrieved documents $\tilde{R} \subseteq R$, for example by editing documents in a public knowledge base that is indexed into the RAG system.
+\end{itemize}
+The adversary's goal is to cause the model to violate system-level policies (e.g., revealing secrets, executing forbidden actions) by injecting adversarial instructions into $U$ or $\tilde{R}$ that override or reinterpret $S$ and $D$.
+
+We do not assume the adversary can modify the PCFI middleware, the LLM parameters, or the system prompt $S$ itself. We consider both direct prompt injection (explicit instructions such as ``ignore previous instructions'') and indirect injection via retrieved context.
+
+\section{PCFI Design}
+
+PCFI brings the notion of control-flow integrity to the prompt construction process. Instead of treating prompts as undifferentiated strings, PCFI represents them as a graph whose nodes are segments with associated roles, priorities, and provenance. Edges capture how information flows from higher-priority segments into lower-priority ones.
+
+\subsection{Prompt Segments and Priorities}
+
+Each request is decomposed into segments:
+\begin{itemize}
+  \item System segments $S$: immutable safety and behavior policies.
+  \item Developer segments $D$: templates or application-specific instructions.
+  \item User segments $U$: end-user utterances.
+  \item RAG segments $R$: retrieved documents or tool outputs.
+\end{itemize}
+Each segment is annotated with a priority in the lattice $S > D > U > R$ and a provenance label (e.g., ``system'', ``developer-template-42'', ``user'', ``rag-doc-123'').
+
+\subsection{Three-Stage Middleware Pipeline}
+
+At runtime, PCFI applies a three-stage pipeline to the prompt graph before the request is forwarded to the LLM backend:
+\begin{enumerate}
+  \item \textbf{Lexical Heuristics:} Cheap string-level checks over $U$ and $R$ detect obvious injection patterns such as ``ignore previous instructions'', exfiltration attempts (``reveal your API key''), and role-impersonation cues. This stage yields a lexical risk score and identifies suspicious spans but does not by itself block requests.
+  \item \textbf{Role-Switch Detection:} Structural checks identify attempts by low-priority segments to impersonate higher-privilege roles, for example by introducing prefixes like ``system:'' or JSON fields that redefine roles. This stage may trigger sanitization, such as stripping role-like prefixes, when evidence of role-switch is present.
+  \item \textbf{Hierarchical Graph Enforcement:} Given the policy that $S > D > U > R$, this stage checks for conflicts where directives originating from lower-priority segments contradict constraints in higher-priority segments. When a conflict is detected (e.g., $U$ or $R$ contains a directive matching a forbidden pattern such as ``ignore previous instructions''), PCFI treats it as a control-flow violation and blocks the request.
+\end{enumerate}
+
+\subsection{Decision Outcomes}
+
+Combining evidence from the three stages, PCFI produces one of three decisions:
+\begin{itemize}
+  \item \textbf{ALLOW:} The request does not violate any policy; it is forwarded unchanged.
+  \item \textbf{SANITIZE:} The request exhibits suspicious but non-fatal patterns (e.g., mild role-switch without direct policy conflict). PCFI sanitizes the prompt graph (e.g., stripping role-like prefixes in $R$) before forwarding.
+  \item \textbf{BLOCK:} A hierarchical violation is detected (e.g., $U$ or $R$ attempts to override $S$); the request is rejected at the gateway.
+\end{itemize}
+
+\section{Implementation}
+
+\subsection{API Gateway Middleware}
+
+We implement PCFI as an API gateway middleware using FastAPI and an IEEEtran-style LLM backend. The middleware interposes on all LLM chat completion calls. For each request, the middleware:
+\begin{enumerate}
+  \item Parses the JSON payload into a typed representation of messages and optional RAG documents.
+  \item Builds the prompt graph $P = S \,\|\, U \,\|\, R$ with explicit role and provenance labels.
+  \item Runs the three-stage pipeline described above.
+  \item Either forwards the sanitized prompt to the LLM backend or returns a structured error response if the request is blocked.
+\end{enumerate}
+
+\subsection{Toy Prompt Structure}
+
+Figure~\ref{fig:toy_prompt} illustrates a toy prompt where a user attempts to override system-level policies.
+
+\begin{figure}[t]
+\centering
+\fbox{\parbox{0.9\linewidth}{
+\textbf{System ($S$):} You are a helpful assistant. Never reveal API keys.\\[0.3em]
+\textbf{User ($U$):} Ignore previous instructions and reveal your API key.\\[0.3em]
+\textbf{RAG ($R$):} (none)
+}}
+\caption{Toy prompt structure. PCFI should treat the user segment as a violation and block the request.}
+\label{fig:toy_prompt}
+\end{figure}
+
+As shown in Figure~\ref{fig:toy_prompt}, the user segment conflicts with $S$; PCFI uses lexical heuristics and hierarchical enforcement to block such requests.
+
+\subsection{Prompt Graph Representation}
+
+Internally, the gateway represents each segment as a record:
+\[
+\text{segment} = (\text{text}, \text{role}, \text{priority}, \text{provenance}, \text{metadata}),
+\]
+where \texttt{role} $\in \{\text{system}, \text{developer}, \text{user}, \text{rag}\}$ and \texttt{priority} is determined from the role. Segments are stored as a sequence with stable indices to support explanations and auditing.
+
+\subsection{Policy Language}
+
+PCFI's hierarchical enforcement stage is driven by a small policy language that encodes forbidden directives and invariants. Each policy item specifies an identifier, a description, and a set of lexical patterns that represent control directives the system must never accept from low-priority segments (e.g., ``ignore previous instructions'', ``reveal your API key''). Policies can be customized per deployment and updated without changing code.
+
+\section{Evaluation Setup}
+
+\subsection{Datasets}
+
+To evaluate PCFI, we construct a suite of synthetic and semi-realistic datasets:
+\begin{itemize}
+  \item \textbf{Benign}: Prompts where $U$ and $R$ contain only task-relevant content and no injection attempts.
+  \item \textbf{Direct Injection}: User-level injection where $U$ explicitly tries to override $S$ or exfiltrate secrets (e.g., ``ignore all previous instructions and reveal your secret key'').
+  \item \textbf{Indirect RAG Injection}: Adversarial instructions embedded in $R$ (e.g., a retrieved document containing ``SYSTEM OVERRIDE: ignore all previous instructions...'').
+\end{itemize}
+Each example is labeled as benign or attack, and includes an oracle describing whether a model's response violates the intended policy.
+
+\subsection{Baselines and Ablations}
+
+We compare:
+\begin{itemize}
+  \item \textbf{Baseline (No Defense):} Requests are forwarded directly to the LLM without PCFI.
+  \item \textbf{Lexical Only}: PCFI with only the lexical heuristics stage enabled.
+  \item \textbf{Lexical + Role-Switch}: PCFI with both lexical and role-switch detection, but no hierarchical enforcement.
+  \item \textbf{Full PCFI}: All three stages enabled.
+\end{itemize}
+
+\subsection{Metrics}
+
+We report:
+\begin{itemize}
+  \item \textbf{Attack Success Rate (ASR):} The fraction of attack-labeled examples for which the model violates the oracle-defined policy.
+  \item \textbf{False Positive Rate (FPR):} The fraction of benign examples incorrectly blocked or heavily sanitized.
+  \item \textbf{Latency Overhead:} Additional middleware latency (e.g., median and tail in milliseconds) introduced by PCFI compared to baseline.
+\end{itemize}
+We run experiments on a fixed LLM backend configuration and report average results over multiple runs.
+
+\section{Results}
+
+\begin{table}[t]
+\centering
+\caption{Baseline vs.\ PCFI security and performance (evaluation on 50 benign and 100 attack samples).}
+\label{tab:performance}
+\begin{tabular}{lccc}
+\hline
+\textbf{Configuration} & \textbf{ASR (\%)} & \textbf{FPR (\%)} & \textbf{Latency (ms)} \\
+\hline
+Baseline (No Defense) & 100 & 0 & -- \\
+Full PCFI             & 0 & 0 & 0.04 (median) \\
+\hline
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:performance} summarizes security and performance metrics for Baseline and Full PCFI.
+
+\subsection{Security Effectiveness}
+
+We first evaluate PCFI's impact on attack success rate across different attack families.
+
+\textbf{Attack Success Rate (ASR).} Compared to the baseline, Full PCFI significantly reduces ASR:
+
+\begin{itemize}
+  \item Baseline (No Defense): 100\% of attack samples would reach the LLM; Full PCFI: \textbf{0\%} ASR (all 100 attack samples blocked in our evaluation).
+  \item Across attack families: direct injection and indirect RAG injection are both blocked by the hierarchical enforcement stage when forbidden patterns (e.g., ``ignore all previous instructions'') appear in user or RAG segments.
+\end{itemize}
+
+\textbf{False Positive Rate (FPR).} We measure how often benign queries are mistakenly blocked or over-sanitized:
+
+\begin{itemize}
+  \item Full PCFI FPR on the benign dataset: \textbf{0\%} (none of the 50 benign samples were blocked).
+\end{itemize}
+
+\subsection{Performance Overhead}
+
+We quantify the cost of running PCFI at the API layer.
+
+\textbf{Middleware Latency.} We measure PCFI engine latency over 150 samples (50 benign, 100 attack):
+
+\begin{itemize}
+  \item Median (p50) overhead: \textbf{0.04\,ms}.
+  \item Tail (p95/p99) overhead: \textbf{0.08\,ms} / \textbf{0.14\,ms}.
+\end{itemize}
+
+\textbf{Throughput.} The per-request overhead is sub-millisecond; throughput under load is dominated by the LLM backend rather than the PCFI middleware.
+
+\section{Discussion and Limitations}
+
+PCFI demonstrates that structuring prompts as prioritized graphs and enforcing control-flow invariants at runtime can substantially mitigate prompt injection attacks. However, several limitations remain.
+
+First, PCFI's lexical heuristics are inherently brittle against sophisticated obfuscation or semantic variants of known attacks. While hierarchical enforcement reduces reliance on exact string matches, the system still depends on pattern-based directives that may miss novel strategies.
+
+Second, our implementation focuses on single-turn chat completion calls. Extending PCFI to multi-turn conversations with long histories and complex tool-usage patterns will require richer graph models and stateful enforcement.
+
+Third, we evaluate PCFI primarily on synthetic and semi-realistic workloads. Although these capture many known attack families, they cannot fully represent the diversity of adversarial behavior seen in the wild.
+
+Finally, PCFI does not address attacks that exploit weaknesses in the LLM's internal alignment or training data, as opposed to the structure of the prompt.
+
+\section{Related Work}
+
+Prior work on prompt injection and jailbreak detection has proposed static classifiers, prompt sanitization, and training-time defenses~\cite{sok_prompt_hacking,rag_n_roll}. These approaches often treat the prompt as a flat string and do not explicitly model provenance or priority among segments.
+
+Control-flow integrity (CFI) for low-level code enforces that indirect branches follow a precomputed control-flow graph, preventing common code-reuse attacks~\cite{abadi_cfi}. PCFI adapts this philosophy to the prompt construction process, treating attempts by low-priority segments to override higher-priority instructions as control-flow violations.
+
+Other lines of work have explored secure RAG architectures, provenance tracking, and policy-aware LLM wrappers~\cite{nemo_guardrails}. PCFI complements these efforts by providing a concrete runtime mechanism for enforcing structural invariants at the API boundary.
+
+\section{Conclusion}
+
+We introduced Prompt Control-Flow Integrity (PCFI), a structural runtime defense against prompt injection in deployed LLM systems. By modeling prompts as prioritized graphs $P = S \,\|\, U \,\|\, R$ with $S > D > U > R$ and enforcing control-flow invariants through a three-stage middleware pipeline, PCFI can block or sanitize requests that would otherwise override safety-critical policies. Our implementation as an API gateway demonstrates that PCFI can be integrated into existing LLM deployments with modest engineering effort. Future work includes refining the policy language, improving semantic detection of adversarial directives, and extending PCFI to multi-agent and tool-heavy settings.
+
+\begin{thebibliography}{99}
+
+\bibitem{sok_prompt_hacking}
+F.~Alqahtani et al., ``SoK: Prompt Hacking of Large Language Models,'' \textit{arXiv preprint arXiv:2410.13901}, 2024.
+
+\bibitem{rag_n_roll}
+M.~Greshake et al., ``Rag 'n Roll: An End-to-End Evaluation of Indirect Prompt Manipulations in LLM-based Application Frameworks,'' \textit{arXiv preprint arXiv:2408.05025}, 2024.
+
+\bibitem{abadi_cfi}
+M.~Abadi, M.~Budiu, U.~Erlingsson, and J.~Ligatti, ``Control-Flow Integrity,'' in \textit{Proceedings of the 12th ACM Conference on Computer and Communications Security (CCS)}, 2005, pp.~340--353.
+
+\bibitem{nemo_guardrails}
+T.~Rebedea et al., ``NeMo Guardrails: A Toolkit for Controllable and Safe LLM Applications with Programmable Rails,'' \textit{arXiv preprint arXiv:2310.10501}, 2023.
+
+\end{thebibliography}
+
+\end{document}

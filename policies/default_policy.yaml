@@ -1,0 +1,29 @@
+metadata:
+  name: default-pcfi-policy
+  version: "0.1.0"
+
+priorities:
+  - SYSTEM
+  - DEVELOPER
+  - USER
+  - RAG
+
+forbidden_directives:
+  - id: override_system_policy
+    description: Attempts to ignore or override system-level safety instructions.
+    patterns:
+      - "ignore previous instructions"
+      - "ignore all previous instructions"
+      - "disregard all above"
+      - "you are no longer required to follow"
+
+  - id: change_output_format
+    description: Attempts to change mandated output format from lower-priority segments.
+    patterns:
+      - "answer in natural language instead of"
+      - "do not follow the format"
+
+required_properties:
+  - id: treat_rag_as_untrusted
+    description: RAG documents must not be able to redefine system behavior.
+
